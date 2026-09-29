@@ -130,6 +130,9 @@ METRICAS_SECUNDARIAS = ["accuracy", "precision", "recall", "roc_auc"]
 
 CV_FOLDS = 5              # StratifiedKFold dentro del train
 UMBRAL = 0.50             # el de la librería; si lo mueves, dilo y justifícalo
+IMPORTANCIA_REPETICIONES = 3
+IMPORTANCIA_MUESTRA = 1000
+IMPORTANCIA_TOP = 20
 
 # ── Ajuste de hiperparámetros ────────────────────────────────────────────────
 # DESACTIVADO a propósito para la entrega del 15 de septiembre.
