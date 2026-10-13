@@ -1,23 +1,13 @@
 # Predicción de cancelación de reservas de hotel
 
-Sistema modular que entrena, evalúa y compara cinco modelos de clasificación binaria
+Sistema modular que entrena, evalúa y compara seis modelos de clasificación binaria
 sobre un conjunto de 119.390 reservas de hotel, selecciona el mejor según una métrica
 justificada, y automatiza el flujo completo desde el CSV crudo hasta la inferencia.
 
 > **Máster en IA, Cloud Computing y DevOps** · Machine Learning y Deep Learning
-> Práctica de evaluación final · Entrega: 15 de septiembre de 2026
+> Práctica de evaluación final · Entrega: 13 de octubre de 2026
 >
-> **Repositorio:** <https://github.com/tmllabres/MasterPonita-ML-EntregaFinal-Grupo6>
-
-<!--
-Este README es la documentación completa de la práctica. El guion lo permite:
-«¿La documentación es el README.md? Si se incluye toda la información necesaria
-definida en el apartado de Entregables obligatorios, sin problema, pero deben estar
-todos los puntos recogidos.»
-
-Los diez puntos obligatorios son los diez apartados de abajo. No borres ninguno.
-Para la plataforma de PontIA hay que subir un PDF: exporta este fichero.
--->
+> **Repositorio:** <https://github.com/kaiariel/pontia-tarea-ml>
 
 ---
 
@@ -25,14 +15,8 @@ Para la plataforma de PontIA hay que subir un PDF: exporta este fichero.
 
 | Persona | Correo | De qué se hace cargo |
 |---|---|---|
-| | | |
-
-<!--
-OBLIGATORIO. El guion: «En la documentación habrá que indicar en un apartado los
-roles llevados a cabo, quién se hace cargo de qué parte», y «en caso de que no se
-haga una distinción específica de los roles […] se asignará la misma nota a ambas».
-Si trabajas solo, dilo aquí y explica que lo hablaste con el profesor.
--->
+| Antonio (`tmllabres`) | tmllabres@gmail.com | Estructura del proyecto, `src/config.py`, contrato entre módulos (`tests/test_contrato.py`), `src/data_loader.py` (carga, limpieza, fugas, duplicados, partición y preprocesador), `src/model_trainer.py` (los seis modelos, bucle de comparación y guardado del artefacto) y el apartado 2 de este README |
+| Ariel Castillo (`kaiariel`) | arielcastillo@outlook.com | `src/evaluator.py` (métricas, matriz de confusión, curvas ROC, importancia de variables e informe), `src/predictor.py` (carga del artefacto e inferencia), cierre del bucle de inferencia en `main.py`, ejecución oficial de `python main.py` y `outputs/`, apartados 1, 3 y 5–11 del README y exportación de `docs/informe_final.pdf` |
 
 ---
 
@@ -84,7 +68,7 @@ es cuando revenue management decide el overbooking o el depósito. Todo lo que s
 la llegada del cliente, o una vez se sabe si canceló, es la respuesta con otras palabras.
 
 **Directas.** `reservation_status` y `reservation_status_date` determinan el objetivo al
-100 % (`Check-Out` → 0; `Canceled` y `No-Show` → 1). Si se dejan, los cinco modelos sacan un
+100 % (`Check-Out` → 0; `Canceled` y `No-Show` → 1). Si se dejan, los modelos sacan un
 AUC ≈ 1,000 y la comparación no distingue nada.
 
 **Posteriores a la llegada.** Otras dos columnas se rellenan cuando el cliente llega, y
@@ -165,24 +149,25 @@ salen todos de esta misma decisión: de las 85.811 filas limpias, **68.648 van a
 
 ## 3. Análisis exploratorio (EDA)
 
-<!--
-OBLIGATORIO. Puntúa por lo que CAMBIÓ, no por el número de gráficos.
-Notebook: notebooks/finales/eda_final.ipynb
-La tabla de abajo es el formato que más rinde: cada hallazgo, con su decisión al lado.
--->
-
 | Hallazgo | Evidencia | Decisión que tomamos |
 |---|---|---|
-| | | |
+| Clases desbalanceadas | Tras limpiar, 72,36 % no cancela / 27,64 % cancela | F1 de la clase «cancela» como métrica principal; accuracy solo como secundaria |
+| Fuga directa | `reservation_status` determina el objetivo al 100 % | Excluir `reservation_status` y `reservation_status_date` |
+| Fuga posterior a la llegada | 7.416 reservas con plaza de parking y 0 canceladas | Excluir `required_car_parking_spaces` y `assigned_room_type` → quedan 27 predictoras |
+| Duplicados exactos | 33.413 filas (28,0 %); sin deduplicar, el 32,7 % del test tendría una gemela exacta en train | Deduplicar antes de particionar → 85.811 filas |
+| Nulos y alta cardinalidad | `company` 94,31 % nulos, `agent` 13,69 %; 177 países, 333 agentes y 348 empresas | Imputar dentro del Pipeline; top 10 + «otros» en `country`, `agent` y `company` |
+| Depósito no reembolsable | `Non Refund` cancela un 94,9 % frente al 26,8 % de `No Deposit` | Conservar `deposit_type`: asociación fuerte, no causa |
+| Canal y tipo de hotel | `Online TA` cancela un 35,3 % frente al 12,1 % de `Corporate`; City Hotel 30,2 % frente a Resort 23,6 % | Conservar `market_segment` y `hotel` como predictoras |
+| Antelación de la reserva | Mediana de `lead_time`: 37 días (no cancela) frente a 79 días (cancela) | Conservar `lead_time`; imputación por mediana y escalado dentro del Pipeline |
+
+Detalle en [`notebooks/finales/eda_final.ipynb`](notebooks/finales/eda_final.ipynb).
 
 ---
 
 ## 4. Diseño del sistema
 
-<!-- OBLIGATORIO. -->
-
 ```
-Entrega-Final-ML/
+pontia-tarea-ml/
 ├── main.py                          orquestador: python main.py
 ├── requirements.txt                 dependencias con versión fijada
 ├── .python-version                  3.12
@@ -197,8 +182,7 @@ Entrega-Final-ML/
 │
 ├── notebooks/
 │   ├── exploracion/                 la cocina: se prueba y se falla
-│   │   ├── eda_inicial.ipynb
-│   │   └── pruebas_modelos.ipynb
+│   │   └── eda_inicial.ipynb
 │   └── finales/                     el escaparate: lo que se defiende
 │       ├── eda_final.ipynb
 │       └── comparativa_modelos.ipynb
@@ -241,38 +225,39 @@ Entrega-Final-ML/
 - **Registro de modelos con interfaz común**, imitando por dentro a una librería de
   AutoML: añadir un modelo más es una clase y una línea, sin tocar el bucle.
 - **Semilla única** (`config.SEMILLA = 42`) para partición, modelos y validación cruzada.
+- **El artefacto es el Pipeline completo** (preprocesado + modelo) más `metadatos.json`
+  con el umbral congelado y las columnas de entrada. `predictor.py` aplica el umbral del
+  artefacto, no el de `config`, y `main.py` termina recargándolo y prediciendo para
+  demostrar el flujo completo hasta la inferencia.
 
 ---
 
 ## 5. Métrica principal y por qué
 
-<!--
-OBLIGATORIO justificarlo. Elígela ANTES de entrenar y no la cambies después.
--->
+**Métrica principal:** F1 de la clase positiva («cancela») · **Secundarias:** accuracy, precision, recall, ROC-AUC.
 
-**Métrica principal:** _(F1 de la clase positiva)_ · **Secundarias:** accuracy, precision, recall, ROC-AUC.
+Tras la limpieza, un modelo que dijera siempre «no cancela» acierta el **72,36 %** sin
+aprender nada: en la tabla del apartado 7 el baseline saca accuracy 0,7236 y F1 0,00.
+Accuracy premia ignorar justo la clase que interesa, así que no sirve como criterio.
 
-Con el reparto del CSV crudo (62,96 / 37,04), un modelo que dijera siempre «no cancela»
-ya acierta el **62,96 %** sin haber aprendido nada: por eso accuracy no sirve como
-criterio. _(Si la limpieza elimina los duplicados, el porcentaje sube a 72,36 % y el
-argumento se refuerza: actualizad la cifra según lo que decidáis en el apartado 2.)_
-
-<!--
-Ojo, «F1 equilibra precision y recall» NO es una justificación: di qué error te duele
-más en este negocio y por qué el equilibrio es lo razonable aquí.
--->
+Se elige F1 porque al hotel le duelen los dos errores (apartado 2): un **falso negativo**
+deja una habitación vacía que ya no se puede revender, y un **falso positivo** obliga a
+realojar a un cliente que sí venía. Optimizar solo recall empujaría a marcar «cancela» a
+casi todo el mundo (overbooking agresivo y clientes realojados); optimizar solo precision
+dejaría escapar la mayoría de cancelaciones. Como el dataset no trae el coste en euros de
+cada error, no hay base para ponderar uno por encima del otro: F1 obliga a no sacrificar
+ninguno. La métrica se fijó antes de entrenar (`config.METRICA_PRINCIPAL = "f1"`) y no se
+cambió después.
 
 ---
 
 ## 6. Cómo ejecutar el proyecto
 
-<!-- OBLIGATORIO: versión de Python, entorno virtual y pasos exactos. -->
-
 **Requisitos:** Python 3.12
 
 ```bash
-git clone https://github.com/tmllabres/MasterPonita-ML-EntregaFinal-Grupo6.git
-cd MasterPonita-ML-EntregaFinal-Grupo6
+git clone https://github.com/kaiariel/pontia-tarea-ml.git
+cd pontia-tarea-ml
 
 python -m venv .venv
 .venv\Scripts\activate          # Windows
@@ -323,91 +308,120 @@ Salidas: figuras y tablas en `outputs/`, modelo en `models/`.
 
 ## 7. Modelos comparados
 
-Los cinco que exige el enunciado, entrenados con el mismo protocolo: mismo
-`StratifiedKFold`, misma semilla, preprocesado dentro del `Pipeline` y
-`scoring` fijado a la métrica principal.
+Los seis modelos (el baseline más los cinco que exige el enunciado), entrenados con el
+mismo protocolo: mismo `StratifiedKFold` de 5 folds, misma semilla, preprocesado dentro
+del `Pipeline` y `scoring` fijado a la métrica principal. Media ± desviación entre folds
+sobre las 68.648 filas de train, copiada de `outputs/tabla_comparativa.csv`.
 
 | Modelo | F1 (CV) | Accuracy | Precision | Recall | ROC-AUC | Tiempo |
 |---|---|---|---|---|---|---|
-| Baseline (`DummyClassifier`) | | | | | | |
-| Regresión logística | | | | | | |
-| Árbol de decisión | | | | | | |
-| Random Forest | | | | | | |
-| Gradient Boosting | | | | | | |
-| Red neuronal (Keras) | | | | | | |
+| Gradient Boosting (XGBoost) | 0,6856 ± 0,0098 | 0,8379 ± 0,0048 | 0,7390 ± 0,0093 | 0,6394 ± 0,0104 | 0,9000 ± 0,0048 | 17,1 s |
+| Red neuronal (Keras) | 0,6659 ± 0,0134 | 0,8313 ± 0,0039 | 0,7352 ± 0,0047 | 0,6090 ± 0,0231 | 0,8904 ± 0,0045 | 99,3 s |
+| Random Forest | 0,6543 ± 0,0068 | 0,8331 ± 0,0034 | 0,7653 ± 0,0087 | 0,5714 ± 0,0057 | 0,8947 ± 0,0050 | 39,1 s |
+| Árbol de decisión | 0,6372 ± 0,0057 | 0,8161 ± 0,0037 | 0,7012 ± 0,0159 | 0,5846 ± 0,0158 | 0,8694 ± 0,0059 | 4,8 s |
+| Regresión logística | 0,5418 ± 0,0068 | 0,7859 ± 0,0029 | 0,6633 ± 0,0074 | 0,4579 ± 0,0073 | 0,8307 ± 0,0043 | 6,4 s |
+| Baseline (`DummyClassifier`) | 0,0000 ± 0,0000 | 0,7236 ± 0,0000 | 0,0000 ± 0,0000 | 0,0000 ± 0,0000 | 0,5000 ± 0,0000 | 4,1 s |
 
-<!--
-La fila del baseline no es decorativa: sin ella, un número suelto no dice si tus
-modelos aportan algo por encima de lo trivial.
-Las métricas de CV son media ± desviación sobre el train. La del test se mide UNA vez.
--->
+El baseline marca el suelo y todos los modelos lo superan. La distancia entre la
+logística (0,54) y los modelos de árboles (0,64–0,69) indica que la relación entre las
+variables y la cancelación no es lineal.
 
 ---
 
 ## 8. Resultados y elección final
 
-<!-- OBLIGATORIO. -->
+**Modelo elegido:** XGBoost (`boosting`).
 
-**Modelo elegido:** _(…)_ · **Por qué gana:** _(…)_
+**Por qué gana.** Tiene el F1 medio más alto en validación cruzada (0,6856 ± 0,0098),
+2 puntos por encima de la red Keras (0,6659) y 3 por encima del Random Forest (0,6543),
+y además entrena en 17 s frente a los 99 s de la red. Su ventaja sale sobre todo del
+recall: detecta más cancelaciones que el bosque (0,64 frente a 0,57) sin perder mucha
+precision. El boosting añade árboles que corrigen los errores de los anteriores, lo que
+encaja con interacciones como agente × país × antelación que un modelo lineal no captura.
 
-Métricas del ganador sobre el conjunto de test _(N reservas nunca vistas: 23.878 si no
-se eliminan los duplicados, 17.163 si sí — poned el número real)_:
+Métricas del ganador sobre el conjunto de test (**N = 17.163 reservas nunca vistas**,
+umbral 0,5), copiadas de `outputs/metricas_test.json`:
 
-| | valor |
+| Métrica | Valor |
 |---|---|
-| F1 | |
-| Accuracy | |
-| Precision | |
-| Recall | |
-| ROC-AUC | |
+| F1 | 0,6882 |
+| Accuracy | 0,8399 |
+| Precision | 0,7450 |
+| Recall | 0,6395 |
+| ROC-AUC | 0,9037 |
 
-**Figuras obligatorias:**
+El F1 de test (0,6882) es casi idéntico al de validación cruzada (0,6856): no hay señal
+de sobreajuste. En cifras absolutas, de unas 4.744 cancelaciones reales del test el
+modelo detecta unas 3.033 y se le escapan unas 1.710; de cada 4 alarmas que da, 3 aciertan.
 
-- Matriz de confusión → `outputs/confusion_matrix.png`
-- Curva ROC de los seis modelos en los mismos ejes → `outputs/roc_curve.png`
-- Importancia de variables del ganador → `outputs/feature_importance.png`
+### Matriz de confusión
+
+![Matriz de confusión](outputs/confusion_matrix.png)
+
+### Curvas ROC de los seis modelos
+
+![Curvas ROC de los seis modelos](outputs/roc_curve.png)
+
+### Importancia de variables del ganador
+
+Calculada con `permutation_importance` sobre el Pipeline completo: mide cuánto cae el F1
+al desordenar cada variable original, sin tener que deshacer el one-hot y válida para
+cualquier ganador.
+
+![Importancia de variables](outputs/feature_importance.png)
+
+Las variables que más pesan son `agent`, `country`, `lead_time`, `market_segment` y
+`total_of_special_requests`, en línea con lo que señalaba el EDA (canal, origen y antelación).
 
 ---
 
 ## 9. Conclusiones
 
-<!-- OBLIGATORIO en el README. Qué se aprendió, qué se puede hacer con esto. -->
+- **El sistema funciona de punta a punta:** CSV crudo → limpieza → seis modelos con el
+  mismo protocolo → evaluación única sobre el test → artefacto guardado → inferencia con
+  `python -m src.predictor`, sin reentrenar.
+- **XGBoost aporta valor real sobre lo trivial:** F1 0,69 frente a 0,00 del baseline y
+  ROC-AUC 0,90 frente a 0,50.
+- **Uso práctico:** con una probabilidad de cancelación por reserva, revenue management
+  puede pedir depósito o hacer overbooking controlado sobre las reservas de mayor riesgo,
+  en lugar de aplicar la tasa media del 27,6 % a todas por igual.
+- **Lo que no resuelve:** con umbral 0,5 se le escapa aproximadamente el 36 % de las
+  cancelaciones. No es un sistema perfecto ni demuestra un ahorro concreto en euros.
+- **Lo que aprendimos:** las decisiones sobre los datos movieron la nota más que la
+  elección del algoritmo. Quitar las dos fugas posteriores a la llegada bajó el F1 de
+  0,710 a 0,678, y sin deduplicar un tercio del test habría tenido copias en train: sin
+  esas decisiones, la métrica publicada habría sido más alta y menos honesta.
 
 ---
 
 ## 10. Reflexión crítica: limitaciones y mejoras
 
-<!--
-OBLIGATORIO, y es donde más gente deja puntos. Reconocer una limitación tú vale
-bastante más que si la detecta el profesor.
-Candidatas honestas:
-  · la validación cruzada no es anidada: los hiperparámetros se eligieron mirando
-    los mismos folds con los que se mide
-  · la partición es aleatoria, no temporal: en producción predices el futuro
-  · el dataset no trae el coste en euros de cada error, así que el umbral se
-    elige por F1 y no por dinero
-  · el modelo mide correlación, no causa
--->
+- **Sin búsqueda de hiperparámetros** (`config.BUSQUEDA = None`): los modelos usan
+  valores razonables fijados a mano; un `RandomizedSearchCV` podría mejorarlos.
+- **Validación cruzada no anidada:** esos valores se fijaron mirando los mismos folds con
+  los que se mide, así que el F1 de CV puede ser algo optimista. El test, medido una sola
+  vez, da una cifra muy parecida (0,6882), lo que reduce esta preocupación.
+- **Partición aleatoria, no temporal:** en producción se predice el futuro. Una partición
+  por fecha de llegada sería más fiel y probablemente daría una cifra algo peor.
+- **Sin coste en euros de cada error:** el umbral 0,5 no está optimizado por dinero. Con
+  esos costes se podría mover el umbral para aceptar más falsos positivos a cambio de
+  menos cancelaciones no detectadas.
+- **`booking_changes` puede contener información posterior** al momento de predecir; se
+  conservó con esa duda declarada (apartado 2).
+- **Deduplicar es una hipótesis:** sin identificador de reserva, algunas habitaciones
+  legítimas de un mismo grupo pueden haberse eliminado (se perdió el 93 % de las
+  reservas `Non Refund`).
+- **Correlación, no causa:** que `Non Refund` u `Online TA` cancelen más no significa que
+  el depósito o el canal causen la cancelación.
+- **Importancias con ruido:** la permutación se calculó sobre una muestra de 1.000 filas y
+  3 repeticiones; los valores negativos pequeños de la figura son ruido de muestreo y solo
+  es fiable el orden de las primeras variables.
 
 ---
 
 ## 11. Bonus técnicos implementados
 
-<!--
-NO es obligatorio, pero vale hasta 2 puntos adicionales y permite llegar al 10.
-El guion es tajante: «Es necesario que el sistema funcione para poder sumar la
-puntuación adicional». Un bonus a medias resta tiempo y no suma nota.
-Borra las filas que no hagáis: una tabla con seis «pendiente» es peor que tres filas.
--->
-
-| Bonus | Estado | Dónde está | Qué demuestra |
-|---|---|---|---|
-| Optimización de hiperparámetros (`RandomizedSearchCV`) | | `src/model_trainer.py` · `config.BUSQUEDA` | |
-| Interpretabilidad (`feature_importances_` / SHAP) | | `src/evaluator.py` · `outputs/feature_importance.png` | |
-| Balanceo de clases (`class_weight` / SMOTE) | | | |
-| API REST con FastAPI (`/train`, `/predict`, `/evaluate`) | | | |
-| Registro de experimentos con MLflow | | | |
-| Interfaz visual (Streamlit / Gradio) | | | |
+No se implementaron bonus técnicos: se priorizó que el flujo obligatorio funcionara completo y bien justificado.
 
 ---
 
