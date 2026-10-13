@@ -10,7 +10,9 @@ Es lo que se ejecuta delante del profesor en la defensa.
 """
 import argparse
 
-from src import config, data_loader, evaluator, model_trainer
+import numpy as np
+
+from src import config, data_loader, evaluator, model_trainer, predictor
 
 
 def main(demo: bool = False) -> None:
@@ -58,6 +60,28 @@ def main(demo: bool = False) -> None:
     # 5. Persistir el artefacto para que predictor.py pueda usarlo sin reentrenar.
     print("[5/5] Guardando el modelo…")
     model_trainer.guardar(pipeline, ganador, m)
+
+    print("Comprobando recarga e inferencia…")
+    recargado, metadatos = predictor.cargar()
+    reservas = d["X_test"].head(5)
+
+    probabilidades_recargadas = predictor.predecir_proba(
+        recargado, reservas
+    )
+
+    if not np.allclose(
+        y_proba[:len(reservas)],
+        probabilidades_recargadas,
+        rtol=1e-5,
+        atol=1e-6,
+    ):
+        raise RuntimeError(
+            "Las probabilidades cambiaron después de guardar y cargar."
+        )
+
+    print("Modelo recargado:", metadatos["ganador"])
+    print("Probabilidades:", probabilidades_recargadas)
+    print("Predicciones:", predictor.predecir(recargado, reservas))
     print("Listo. Figuras en outputs/, modelo en models/.")
 
 

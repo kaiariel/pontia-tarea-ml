@@ -1,48 +1,94 @@
-"""Predicciones con el modelo ya entrenado: el camino de vuelta.
+"""Carga el modelo guardado y predice reservas sin reentrenar."""
 
-Esto es la INFERENCIA, y es lo que cierra el «flujo completo desde los datos hasta
-la inferencia» que pide el enunciado. Este módulo NO entrena, NO evalúa y NO abre
-el CSV de train: carga el artefacto y predice.
-
-La prueba de que el artefacto es usable: alguien que solo tenga models/ y este
-fichero puede predecir una reserva nueva sin reentrenar nada.
-"""
 from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import joblib
+import numpy as np
+import pandas as pd
 
 from . import config
 
 
 def cargar(ruta=None):
-    """Carga el Pipeline entrenado (preprocesado + modelo) y sus metadatos.
+    """Devuelve el Pipeline guardado y sus metadatos."""
+    ruta_modelo = Path(config.MODELO_PKL if ruta is None else ruta)
+    ruta_metadatos = ruta_modelo.with_name(config.METADATOS.name)
 
-    Lee config.MODELO_PKL y config.METADATOS, los mismos que escribe
-    model_trainer.guardar(). Si el ganador es la red de Keras son DOS ficheros:
-    config.MODELO_KERAS con arquitectura y pesos, y el .pkl con el
-    ColumnTransformer ya ajustado.
+    for archivo in (ruta_modelo, ruta_metadatos):
+        if not archivo.exists():
+            raise FileNotFoundError(
+                f"Falta {archivo}. Ejecuta primero python main.py."
+            )
 
-    Devuelve (pipeline, metadatos). El umbral sale de los metadatos, NO de
-    config.UMBRAL: el que vale es el que se congeló al entrenar este artefacto.
-    """
-    raise NotImplementedError("TODO")
+    metadatos = json.loads(ruta_metadatos.read_text(encoding="utf-8"))
 
+    ruta_keras = ruta_modelo.with_name(config.MODELO_KERAS.name)
+    if metadatos["ganador"] == "red_keras" and not ruta_keras.exists():
+        raise FileNotFoundError(
+            f"Falta {ruta_keras}. Vuelve a generar el modelo."
+        )
 
-def predecir(pipeline, reservas):
-    """Devuelve 0/1 por reserva aplicando el umbral de los metadatos.
+    pipeline = joblib.load(ruta_modelo)
 
-    Las reservas entran con las MISMAS columnas crudas que el train: el Pipeline
-    se encarga del resto. Si tienes que preparar los datos a mano antes de llamar
-    aquí, es que el preprocesado se quedó fuera del artefacto.
-    """
-    raise NotImplementedError("TODO")
+    if metadatos["ganador"] == "red_keras":
+        pipeline.steps[-1][1].cargar_aparte(ruta_keras)
+
+    # Mantiene las firmas previstas y conserva el umbral del artefacto.
+    pipeline.metadatos_ = metadatos
+
+    return pipeline, metadatos
 
 
 def predecir_proba(pipeline, reservas):
-    """Devuelve la probabilidad de cancelación, que es lo que el modelo calcula
-    de verdad. El 0/1 sale luego de comparar contra el umbral."""
-    raise NotImplementedError("TODO")
+    """Devuelve la probabilidad de cancelación de cada reserva."""
+    if not hasattr(pipeline, "metadatos_"):
+        raise ValueError("Carga primero el modelo con cargar().")
+
+    columnas = pipeline.metadatos_["columnas"]
+    faltantes = [columna for columna in columnas if columna not in reservas]
+
+    if faltantes:
+        raise ValueError(f"Faltan columnas de entrada: {faltantes}")
+
+    entradas = reservas.loc[:, columnas]
+    probabilidades = pipeline.predict_proba(entradas)
+
+    clases = np.asarray(pipeline.classes_)
+    posiciones = np.flatnonzero(clases == 1)
+
+    if len(posiciones) != 1:
+        raise ValueError("El modelo no identifica correctamente la clase 1.")
+
+    return np.asarray(
+        probabilidades[:, posiciones[0]], dtype=float
+    )
+
+
+def predecir(pipeline, reservas):
+    """Devuelve 0/1 usando el umbral guardado al entrenar."""
+    probabilidades = predecir_proba(pipeline, reservas)
+    umbral = float(pipeline.metadatos_["umbral"])
+    return (probabilidades >= umbral).astype(int)
 
 
 if __name__ == "__main__":
-    # Demo de inferencia: python -m src.predictor
-    # Coge unas cuantas reservas del CSV, quítales la respuesta y predícelas.
-    raise SystemExit("TODO: demo de inferencia")
+    # Ejemplo de uso sobre cinco registros; no mide rendimiento.
+    from . import data_loader
+
+    pipeline, metadatos = cargar()
+
+    crudo = data_loader.cargar_crudo().head(5)
+    reservas = crudo.loc[:, metadatos["columnas"]]
+
+    resultado = pd.DataFrame({
+        "probabilidad_cancelacion": predecir_proba(pipeline, reservas),
+        "prediccion": predecir(pipeline, reservas),
+    })
+
+    print("Modelo:", metadatos["ganador"])
+    print("Umbral:", metadatos["umbral"])
+    print("Artefacto demo:", metadatos["demo"])
+    print(resultado.to_string(index=False))

@@ -86,12 +86,35 @@ def matriz_confusion(y_true, y_pred, ruta=None):
 
 
 def curva_roc(modelos_proba: dict, y_true, ruta=None):
-    """Figura obligatoria del enunciado. Guarda en config.FIG_ROC.
+    """Guarda las curvas ROC de todos los modelos en los mismos ejes."""
+    destino = Path(config.FIG_ROC if ruta is None else ruta)
+    destino.parent.mkdir(parents=True, exist_ok=True)
 
-    LAS CINCO CURVAS EN LOS MISMOS EJES, con su AUC en la leyenda y la diagonal
-    del azar. Cinco gráficos sueltos no demuestran nada.
-    """
-    raise NotImplementedError("TODO")
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    for nombre, probabilidades in modelos_proba.items():
+        fpr, tpr, _ = roc_curve(y_true, probabilidades, pos_label=1)
+        auc = roc_auc_score(y_true, probabilidades)
+        ax.plot(fpr, tpr, label=f"{nombre} (AUC = {auc:.3f})")
+
+    ax.plot(
+        [0, 1], [0, 1],
+        linestyle="--",
+        color="gray",
+        label="Azar (AUC = 0.500)",
+    )
+    ax.set_xlabel("Tasa de falsos positivos")
+    ax.set_ylabel("Tasa de verdaderos positivos")
+    ax.set_title("Comparación de curvas ROC")
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1.05)
+    ax.legend(loc="lower right")
+    ax.grid(alpha=0.3)
+
+    fig.tight_layout()
+    fig.savefig(destino, dpi=160)
+    plt.close(fig)
+    return destino
 
 
 def importancias(pipeline, X, y, ruta=None):
@@ -134,7 +157,7 @@ def informe(tabla_comparativa, metricas_test: dict, ruta=None):
     ruta_csv = carpeta / config.TABLA_COMPARATIVA.name
     ruta_json = carpeta / config.METRICAS_TEST.name
 
-    tabla_comparativa.to_csv(ruta_csv, index=False)
+    tabla_comparativa.reset_index().to_csv(ruta_csv, index=False)
 
     with ruta_json.open("w", encoding="utf-8") as archivo:
         json.dump(metricas_test, archivo, ensure_ascii=False, indent=2)
